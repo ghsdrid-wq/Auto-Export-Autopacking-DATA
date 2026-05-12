@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import os
 import sys
 import logging
+import shutil
 
 # ===== FIX EXE PATH =====
 if getattr(sys, 'frozen', False):
@@ -158,7 +159,36 @@ def reset_hourly_files(output_path):
     try:
         logging.info("🔄 Reset hourly files 00-23")
 
-        # ===== header ของ 2 sheet =====
+        # ===============================
+        # สร้าง folder backup ตามวันที่
+        # ===============================
+        backup_date = datetime.now().strftime("%Y-%m-%d")
+        backup_folder = os.path.join(output_path, backup_date)
+
+        os.makedirs(backup_folder, exist_ok=True)
+
+        # ===============================
+        # ย้ายไฟล์เดิมเข้า backup
+        # ===============================
+        for h in range(24):
+            name = f"{h:02d}.xlsx"
+
+            old_path = os.path.join(output_path, name)
+            new_path = os.path.join(backup_folder, name)
+
+            if os.path.exists(old_path):
+
+                # ถ้ามีไฟล์ชื่อซ้ำให้ลบทิ้งก่อน
+                if os.path.exists(new_path):
+                    os.remove(new_path)
+
+                shutil.move(old_path, new_path)
+
+        logging.info(f"📦 Backup to: {backup_folder}")
+
+        # ===============================
+        # สร้างไฟล์ใหม่
+        # ===============================
         df1 = pd.DataFrame(columns=[
             "Pipeline",
             "Feeder No",
@@ -276,6 +306,8 @@ class App:
         self.btn_manual = tk.Button(
             btn_frame,
             text="Export",
+            bg="#e67e22",
+            fg="white",
             width=10,
             command=self.manual_export_range
         )
@@ -361,7 +393,7 @@ class App:
     def update_ui_state(self):
         # ===== MANUAL RUNNING =====
         if self.manual_running:
-            self.btn_manual.config(text="Cancel", bg="#e67e22")
+            self.btn_manual.config(text="Cancel", bg="#e74c3c")
             self.btn.config(state="disabled")
 
             self.entry_path.config(state="disabled")
@@ -377,8 +409,17 @@ class App:
 
         # ===== AUTO RUNNING =====
         if self.running:
-            self.btn.config(text="Stop", bg="#e74c3c")
-            self.btn_manual.config(state="disabled")
+            self.btn.config(
+                text="Stop",
+                bg="#e74c3c",
+                state="normal"
+            )
+
+            self.btn_manual.config(
+                text="Export",
+                bg="#e67e22",
+                state="disabled"
+            )
 
             self.entry_path.config(state="disabled")
             self.btn_browse.config(state="disabled")
@@ -389,9 +430,19 @@ class App:
             self.end_hour.config(state="disabled")
 
             self.status.config(text="Status: Running")
+
         else:
-            self.btn.config(text="Start Auto", bg="#2ecc71")
-            self.btn_manual.config(text="Export", state="normal")
+            self.btn.config(
+                text="Start Auto",
+                bg="#2ecc71",
+                state="normal"
+            )
+
+            self.btn_manual.config(
+                text="Export",
+                bg="#e67e22",
+                state="normal"
+            )
 
             self.entry_path.config(state="normal")
             self.btn_browse.config(state="normal")
@@ -465,7 +516,6 @@ class App:
                 self.manual_running = False
                 self.cancel_flag = False
 
-                # 🔥 สำคัญ: reset auto state
                 self.running = False
 
                 self.update_ui_state()
