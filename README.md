@@ -411,4 +411,4 @@ MIT License
 
 # Author
 
-Developed
+Developed for warehouse sorting automation and hourly export workflow optimization.
