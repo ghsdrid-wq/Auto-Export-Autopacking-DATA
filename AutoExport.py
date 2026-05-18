@@ -160,9 +160,10 @@ def reset_hourly_files(output_path):
         logging.info("🔄 Reset hourly files 00-23")
 
         # ===============================
-        # สร้าง folder backup ตามวันที่
+        # สร้าง folder backup เป็นวันที่ของวันก่อนหน้า
+        # เพราะ reset จะเกิดในวันถัดไปหลังไฟล์รายชั่วโมงครบวันแล้ว
         # ===============================
-        backup_date = datetime.now().strftime("%Y-%m-%d")
+        backup_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         backup_folder = os.path.join(output_path, backup_date)
 
         os.makedirs(backup_folder, exist_ok=True)
