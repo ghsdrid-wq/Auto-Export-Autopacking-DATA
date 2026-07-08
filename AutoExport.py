@@ -624,7 +624,23 @@ class App:
 
 
 # ================= MAIN =================
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = App(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        # เขียน traceback ลงไฟล์ข้าง exe เสมอ กัน error หายตอน build แบบ windowed
+        import traceback
+        try:
+            base = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd()
+            crash_path = os.path.join(base, "crash.log")
+            with open(crash_path, "a", encoding="utf-8") as f:
+                f.write(f"\n===== CRASH {datetime.now()} =====\n")
+                f.write(traceback.format_exc())
+        except Exception:
+            pass
+        raise
