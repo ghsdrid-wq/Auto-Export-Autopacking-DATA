@@ -536,7 +536,7 @@ class App:
             if self.running and not self.manual_running:
                 now = datetime.now()
                 today = datetime.now().date()
-                if (now.hour == 12 and now.minute == 0 and now.second < 5
+                if (now.hour == 13 and now.minute == 0 and now.second < 5
                     and self.last_reset_date != today):
 
                     reset_hourly_files(self.path_var.get())
