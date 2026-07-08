@@ -11,6 +11,10 @@ import os
 import sys
 import logging
 import shutil
+import warnings
+
+# pandas เตือนเรื่องใช้ DBAPI แทน SQLAlchemy — ใช้งานได้ปกติ ปิดไว้กัน log รก
+warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 
 # ===== FIX EXE PATH =====
 if getattr(sys, 'frozen', False):
@@ -23,6 +27,7 @@ from plyer import notification
 
 CONFIG_FILE = "config.ini"
 MAX_DAYS_BACK = 7  # จำกัดย้อนหลัง
+MAX_LOG_LINES = 500  # จำกัดจำนวนบรรทัด log บนหน้าจอ กันแรมโต
 # ================= CONFIG =================
 def load_config():
     config = configparser.ConfigParser()
@@ -69,11 +74,12 @@ def setup_logger():
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
-    # CONSOLE (debug)
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-    
+    # CONSOLE (debug) — เพิ่มเฉพาะตอนมี stderr จริง (exe แบบไม่มี console จะเป็น None)
+    if sys.stderr:
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        logger.addHandler(console)
+
 
 # ================= NOTIFY =================
 def notify(title, msg):
@@ -160,8 +166,9 @@ def reset_hourly_files(output_path):
         logging.info("🔄 Reset hourly files 00-23")
 
         # ===============================
-        # สร้าง folder backup เป็นวันที่ของวันก่อนหน้า
-        # เพราะ reset จะเกิดในวันถัดไปหลังไฟล์รายชั่วโมงครบวันแล้ว
+        # สร้าง folder backup เป็นวันที่ของวันก่อนหน้า (วันที่งานเริ่ม)
+        # เพราะรอบงานเริ่มเที่ยงวันก่อน ถึงเที่ยงวันนี้ แล้ว reset ตอนบ่ายโมงของวันนี้
+        # เช่น เริ่ม 09/07 -> reset บ่ายโมง 10/07 -> backup ไปโฟลเดอร์ 2026-07-09
         # ===============================
         backup_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         backup_folder = os.path.join(output_path, backup_date)
@@ -335,8 +342,12 @@ class App:
         log_frame.grid_rowconfigure(0, weight=1)
         log_frame.grid_columnconfigure(0, weight=1)
 
-        # TEXT
-        self.log_text = tk.Text(log_frame, bg="black", fg="#00ff9c")
+        # TEXT (read-only — กันผู้ใช้พิมพ์ทับ)
+        self.log_text = tk.Text(
+            log_frame, bg="black", fg="#00ff9c",
+            state="disabled", wrap="none",
+            font=("Consolas", 9)
+        )
         self.log_text.grid(row=0, column=0, sticky="nsew")
 
         # SCROLLBAR
@@ -363,8 +374,32 @@ class App:
         self.end_hour.set(f"{now.hour:02d}")
 
     def log(self, msg):
-        self.log_text.insert("end", f"{datetime.now()} - {msg}\n")
-        self.log_text.see("end")
+        # เรียกได้จากทุก thread — ส่งงานเข้า main loop ของ Tkinter เสมอ กัน crash
+        def _append():
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.log_text.config(state="normal")
+            self.log_text.insert("end", f"{ts} - {msg}\n")
+
+            # จำกัดจำนวนบรรทัด กันแรมโตเวลารันข้ามวัน
+            line_count = int(self.log_text.index("end-1c").split(".")[0])
+            if line_count > MAX_LOG_LINES:
+                self.log_text.delete("1.0", f"{line_count - MAX_LOG_LINES}.0")
+
+            self.log_text.see("end")
+            self.log_text.config(state="disabled")
+
+        try:
+            self.root.after(0, _append)
+        except RuntimeError:
+            # root ถูกปิดไปแล้ว
+            pass
+
+    def ui(self, func):
+        # helper เรียก UI update จาก background thread ให้ปลอดภัย
+        try:
+            self.root.after(0, func)
+        except RuntimeError:
+            pass
 
     # ================= ACTION =================
     def browse(self):
@@ -519,8 +554,8 @@ class App:
 
                 self.running = False
 
-                self.update_ui_state()
-                
+                self.ui(self.update_ui_state)
+
 
         threading.Thread(target=task, daemon=True).start()
             
